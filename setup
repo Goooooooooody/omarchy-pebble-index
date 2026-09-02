@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PLUGIN_ID="io.github.goody.omarchy-pebble-index"
+PLUGIN_HOME="${HOME}/.config/omarchy/plugins/${PLUGIN_ID}"
+CONFIG_DIR="${HOME}/.config/omarchy-pebble-index"
+CONFIG_FILE="${CONFIG_DIR}/config.toml"
+STATE_DIR="${HOME}/.local/state/omarchy-pebble-index"
+DATA_DIR="${HOME}/.local/share/omarchy-pebble-index"
+NOTES_DIR="${HOME}/Notes/inbox"
+UNIT_DIR="${HOME}/.config/systemd/user"
+UNIT_FILE="${UNIT_DIR}/omarchy-pebble-index.service"
+BIN_LINK="${HOME}/.local/bin/pebble-index"
+
+for dependency in python3 jq tailscale systemctl; do
+  command -v "$dependency" >/dev/null || {
+    echo "Missing required tool: ${dependency}" >&2
+    exit 127
+  }
+done
+
+if [[ ! -f "${SCRIPT_DIR}/manifest.json" ]]; then
+  echo "setup must be run from the plugin checkout" >&2
+  exit 1
+fi
+
+if [[ "${SCRIPT_DIR}" != "${PLUGIN_HOME}" ]]; then
+  mkdir -p "$(dirname "$PLUGIN_HOME")"
+  if [[ -e "${PLUGIN_HOME}" && ! -L "${PLUGIN_HOME}" ]]; then
+    echo "Plugin directory already exists at ${PLUGIN_HOME}." >&2
+    echo "Remove it or run setup from that checkout." >&2
+    exit 1
+  fi
+  ln -sfn "${SCRIPT_DIR}" "${PLUGIN_HOME}"
+  echo "Linked ${SCRIPT_DIR} -> ${PLUGIN_HOME}"
+fi
+
+mkdir -p "${CONFIG_DIR}" "${CONFIG_DIR}/actions" "${STATE_DIR}" "${DATA_DIR}" "${NOTES_DIR}" "${UNIT_DIR}" "${HOME}/.local/bin"
+chmod 700 "${CONFIG_DIR}" "${CONFIG_DIR}/actions" "${STATE_DIR}" "${DATA_DIR}" "${NOTES_DIR}"
+
+ENV_FILE="${CONFIG_DIR}/.env"
+if [[ ! -f "${ENV_FILE}" ]]; then
+  if [[ -f "${SCRIPT_DIR}/.env.example" ]]; then
+    cp "${SCRIPT_DIR}/.env.example" "${ENV_FILE}"
+  else
+    printf '# OPENROUTER_API_KEY=\n' > "${ENV_FILE}"
+  fi
+  chmod 600 "${ENV_FILE}"
+  echo "Wrote ${ENV_FILE} (add OPENROUTER_API_KEY for cloud/local classifiers)"
+fi
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+  token="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  sed "s/CHANGE_ME/${token}/" "${SCRIPT_DIR}/config.example.toml" > "${CONFIG_FILE}"
+  chmod 600 "${CONFIG_FILE}"
+  echo "Wrote ${CONFIG_FILE}"
+else
+  token="$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("'"${CONFIG_FILE}"'").read_text()).get("token",""))')"
+  if [[ -z "${token}" || "${token}" == "CHANGE_ME" ]]; then
+    token="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+    python3 - <<PY
+from pathlib import Path
+path = Path("${CONFIG_FILE}")
+text = path.read_text()
+import re
+path.write_text(re.sub(r'(?m)^token = ".*"$', 'token = "${token}"', text, count=1))
+PY
+    chmod 600 "${CONFIG_FILE}"
+  fi
+fi
+
+install -m 644 "${SCRIPT_DIR}/systemd/omarchy-pebble-index.service" "${UNIT_FILE}"
+ln -sfn "${PLUGIN_HOME}/bin/pebble-index" "${BIN_LINK}"
+chmod +x "${SCRIPT_DIR}/bin/pebble-index" "${SCRIPT_DIR}/state.sh" "${SCRIPT_DIR}/setup" "${SCRIPT_DIR}/uninstall"
+
+systemctl --user daemon-reload
+systemctl --user enable --now omarchy-pebble-index.service
+
+ts_ip="$(tailscale ip -4 | head -n1 || true)"
+port="$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("'"${CONFIG_FILE}"'").read_text()).get("bind_port",8787))')"
+
+cat <<EOF
+
+Pebble Index receiver is installed.
+
+CoreApp → Index → Webhook:
+  URL:    http://${ts_ip:-<tailscale-ip>}:${port}/webhook
+  Header: Authorization
+  Value:  Bearer ${token}
+  Send:   Transcription
+  Trigger: whichever gesture you want
+
+The agent sink is OFF until you set agent_enabled = true in:
+  ${CONFIG_FILE}
+
+Uninstall with: ${SCRIPT_DIR}/uninstall
+Menu-only plugin removal leaves this systemd unit running.
+EOF

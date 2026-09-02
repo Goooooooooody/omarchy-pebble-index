@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.goody.omarchy-pebble-index",
+  "name": "Pebble Index",
+  "version": "0.1.0",
+  "author": "goody",
+  "description": "Receive Pebble Index webhooks and dispatch notes, reminders, calendar events, or an agent.",
+  "license": "MIT",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Pebble Index",
+    "description": "Index ring inbox: last capture, replay, and dispatch status",
+    "category": "Capture",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

@@ -1,0 +1,23 @@
+# Example community action. Disabled until you turn it on:
+#
+#   [actions.log]
+#   enabled = true
+#
+# in ~/.config/omarchy-pebble-index/config.toml
+# then: systemctl --user restart omarchy-pebble-index.service
+#
+# Copy this file to ~/.config/omarchy-pebble-index/actions/ to own it,
+# or drop a sibling pebble-index/*.toml in another Omarchy plugin.
+
+id = "log"
+label = "Log"
+description = "Append the transcript to ~/Notes/log/YYYY-MM-DD.md. Use when it starts with log or journal."
+enabled = false
+priority = 80
+match = "wake"
+wake = ["log", "journal"]
+fields = ["title", "body"]
+command = ["{dir}/log.sh", "{title}", "{body}"]
+timeout = 10
+fallback = "note"
+glyph = "󰷈"

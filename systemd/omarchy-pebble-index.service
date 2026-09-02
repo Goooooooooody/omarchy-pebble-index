@@ -1,0 +1,18 @@
+[Unit]
+Description=Omarchy Pebble Index webhook receiver
+After=tailscaled.service network-online.target
+Wants=tailscaled.service
+
+[Service]
+Type=simple
+ExecStart=%h/.config/omarchy/plugins/io.github.goody.omarchy-pebble-index/bin/pebble-index serve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/omarchy-pebble-index %h/.local/state/omarchy-pebble-index %h/.config/omarchy-pebble-index %h/Notes
+EnvironmentFile=-%h/.config/omarchy-pebble-index/.env
+
+[Install]
+WantedBy=default.target

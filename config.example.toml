@@ -1,0 +1,27 @@
+# Copied to ~/.config/omarchy-pebble-index/config.toml by ./setup
+# chmod 0600. Do not commit a real token.
+
+bind_port = 8787
+classifier = "rules" # rules | local | cloud
+notes_inbox = "~/Notes/inbox"
+agent_enabled = false
+herdr_command = ["omarchy", "agent", "prompt", "{prompt}"]
+wake_phrases = ["herd", "herdr", "agent", "go do"]
+token = "CHANGE_ME"
+
+# HTTP classifiers leave api_key empty and read OPENROUTER_API_KEY from
+# ~/.config/omarchy-pebble-index/.env (0600). Do not put keys in this file.
+
+[local]
+base_url = ""
+api_key = ""
+model = ""
+
+[cloud]
+base_url = "https://openrouter.ai/api"
+api_key = ""
+model = "z-ai/glm-5.3-flash"
+
+# Community / shipped actions. See ACTIONS.md.
+# [actions.log]
+# enabled = true
