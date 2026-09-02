@@ -4,7 +4,7 @@ Receive [Pebble Index](https://help.repebble.com/en/articles/15724406-index-adva
 
 The HTTP receiver is a `systemd --user` unit. It does **not** run inside `omarchy-shell`. The bar widget is a QML inbox.
 
-Plugin id: `io.github.goody.omarchy-pebble-index`
+Plugin id: `io.github.goooooooooody.omarchy-pebble-index`
 
 ## Requirements
 
@@ -107,4 +107,4 @@ Left-click the bar icon for the inbox. Open a note, show reminders, or toggle th
 
 ## License
 
-MIT. Publish from a personal GitHub account that matches the plugin id host (`goody`), not an employer-managed `gh` login.
+MIT. Hosted at [github.com/Goooooooooody/omarchy-pebble-index](https://github.com/Goooooooooody/omarchy-pebble-index).

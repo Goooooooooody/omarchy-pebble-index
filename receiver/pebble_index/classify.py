@@ -226,7 +226,7 @@ def classify_http(text: str, recorded_at: datetime, endpoint: ModelEndpoint, con
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/goody/omarchy-pebble-index",
+            "HTTP-Referer": "https://github.com/Goooooooooody/omarchy-pebble-index",
             "X-Title": "omarchy-pebble-index",
         },
     )

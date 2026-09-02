@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-PLUGIN_ID="io.github.goody.omarchy-pebble-index"
+PLUGIN_ID="io.github.goooooooooody.omarchy-pebble-index"
 PLUGIN_HOME="${HOME}/.config/omarchy/plugins/${PLUGIN_ID}"
 CONFIG_DIR="${HOME}/.config/omarchy-pebble-index"
 CONFIG_FILE="${CONFIG_DIR}/config.toml"
@@ -24,6 +24,12 @@ done
 if [[ ! -f "${SCRIPT_DIR}/manifest.json" ]]; then
   echo "setup must be run from the plugin checkout" >&2
   exit 1
+fi
+
+OLD_PLUGIN_HOME="${HOME}/.config/omarchy/plugins/io.github.goody.omarchy-pebble-index"
+if [[ -L "${OLD_PLUGIN_HOME}" ]]; then
+  rm -f "${OLD_PLUGIN_HOME}"
+  echo "Removed old plugin link ${OLD_PLUGIN_HOME}"
 fi
 
 if [[ "${SCRIPT_DIR}" != "${PLUGIN_HOME}" ]]; then

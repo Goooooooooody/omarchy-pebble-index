@@ -1,8 +1,6 @@
 # Submission
 
-https://github.com/goody/omarchy-pebble-index
-
-(Local repo only until a personal remote is added. Do not push this to an employer-managed GitHub account.)
+https://github.com/Goooooooooody/omarchy-pebble-index
 
 ## Category
 

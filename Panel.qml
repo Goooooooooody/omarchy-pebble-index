@@ -9,8 +9,8 @@ import qs.Ui
 Panel {
   id: root
 
-  moduleName: "io.github.goody.omarchy-pebble-index"
-  ipcTarget: "io.github.goody.omarchy-pebble-index"
+  moduleName: "io.github.goooooooooody.omarchy-pebble-index"
+  ipcTarget: "io.github.goooooooooody.omarchy-pebble-index"
 
   property string focusSection: "captures"
   property int selectedIndex: 0
@@ -31,7 +31,7 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property string pluginHome: (Quickshell.env("HOME") || "") + "/.config/omarchy/plugins/io.github.goody.omarchy-pebble-index"
+  readonly property string pluginHome: (Quickshell.env("HOME") || "") + "/.config/omarchy/plugins/io.github.goooooooooody.omarchy-pebble-index"
   readonly property string stateCommand: pluginHome + "/state.sh"
   readonly property string cli: pluginHome + "/bin/pebble-index"
 
@@ -69,7 +69,7 @@ Panel {
         ensureCursor()
       }
     } catch (e) {
-      console.warn("io.github.goody.omarchy-pebble-index: invalid state", e)
+      console.warn("io.github.goooooooooody.omarchy-pebble-index: invalid state", e)
     }
   }
 
@@ -191,7 +191,7 @@ Panel {
     }
     onExited: function(exitCode) {
       root.refreshing = false
-      if (exitCode !== 0) console.warn("io.github.goody.omarchy-pebble-index: state exited", exitCode)
+      if (exitCode !== 0) console.warn("io.github.goooooooooody.omarchy-pebble-index: state exited", exitCode)
     }
   }
 
@@ -200,7 +200,7 @@ Panel {
     running: false
     onExited: function(exitCode) {
       root.refresh()
-      if (exitCode !== 0) console.warn("io.github.goody.omarchy-pebble-index: action failed", root.lastAction, exitCode)
+      if (exitCode !== 0) console.warn("io.github.goooooooooody.omarchy-pebble-index: action failed", root.lastAction, exitCode)
     }
   }
 

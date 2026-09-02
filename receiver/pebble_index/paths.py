@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PLUGIN_ID = "io.github.goody.omarchy-pebble-index"
+PLUGIN_ID = "io.github.goooooooooody.omarchy-pebble-index"
 APP_NAME = "omarchy-pebble-index"
 
 

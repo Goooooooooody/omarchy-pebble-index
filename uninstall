@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PLUGIN_ID="io.github.goody.omarchy-pebble-index"
+PLUGIN_ID="io.github.goooooooooody.omarchy-pebble-index"
 UNIT="omarchy-pebble-index.service"
 BIN_LINK="${HOME}/.local/bin/pebble-index"
 
