@@ -1,6 +1,6 @@
 # omarchy-pebble-index
 
-Receive [Pebble Index](https://help.repebble.com/en/articles/15724406-index-advanced-features-mcp-webhook) webhooks on Omarchy and turn each transcription into one desktop action: a markdown note, an `omarchy reminder`, a Caldir calendar event, or (opt-in) an agent prompt.
+Receive [Pebble Index](https://help.repebble.com/en/articles/15724406-index-advanced-features-mcp-webhook) webhooks on Omarchy and turn each transcription into one desktop action: `omarchy agent` by default, or a note, reminder, calendar event, or Herdr when those match.
 
 The HTTP receiver is a `systemd --user` unit. It does **not** run inside `omarchy-shell`. The bar widget is a QML inbox.
 
@@ -47,7 +47,7 @@ Any device that has the bearer token can dispatch actions. Treat the token like 
 
 `classifier` in config is exactly one of `rules`, `local`, or `cloud`. There is no hidden fallback.
 
-- **rules** (default): wake phrase at the start of the transcript → agent (if enabled); `in N minutes/hours` → reminder; GNU `date`-parseable clock/date → calendar; otherwise a note. Relative delays longer than 24 hours become calendar events.
+- **rules** (default): `herd`/`herdr` at the start → Herdr; `note …` → inbox markdown; `in N minutes/hours` → reminder; GNU `date`-parseable clock/date → calendar; otherwise `omarchy agent`. Relative delays longer than 24 hours become calendar events.
 - **local / cloud**: OpenAI-compatible `POST /v1/chat/completions`. If the endpoint is unset or errors, dispatch fails and you get a notification.
 
 API keys stay out of `config.toml`. Put `OPENROUTER_API_KEY` in `~/.config/omarchy-pebble-index/.env` (0600). The user unit loads that file via `EnvironmentFile`. Example cloud settings (OMP's GLM Flash):
@@ -67,10 +67,11 @@ model = "z-ai/glm-5.3-flash"
 |---|---|
 | `in 20 minutes …` | `omarchy reminder 20 "…"` |
 | `tomorrow 3pm …` | `calendar-create` or `caldir new` (1h). If neither exists, a note. |
-| everything else | `~/Notes/inbox/YYYY-MM-DD-HHMMSS-<id8>.md` |
-| starts with `herd` / `herdr` / `agent` / `go do` | `omarchy agent prompt …` **only if** `agent_enabled = true` |
+| starts with `note` | `~/Notes/inbox/YYYY-MM-DD-HHMMSS-<id8>.md` |
+| starts with `herd` / `herdr` | `herdr agent prompt default …` |
+| everything else | `omarchy agent prompt …` |
 
-The agent sink ships **off**. Voice transcripts are untrusted input.
+`agent_enabled` ships **on**. Set it `false` to fall back to notes. Voice transcripts are untrusted input.
 
 Add a community sink by dropping a TOML file — see [ACTIONS.md](ACTIONS.md). `pebble-index actions` lists what is loaded. Shipped example (`log`) stays off until you set `[actions.log] enabled = true`.
 

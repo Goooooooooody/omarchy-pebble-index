@@ -24,9 +24,10 @@ class Config:
     bind_port: int = 8787
     classifier: str = "rules"
     notes_inbox: str = "~/Notes/inbox"
-    agent_enabled: bool = False
-    herdr_command: list[str] = field(default_factory=lambda: ["omarchy", "agent", "prompt", "{prompt}"])
-    wake_phrases: list[str] = field(default_factory=lambda: ["herd", "herdr", "agent", "go do"])
+    agent_enabled: bool = True
+    agent_command: list[str] = field(default_factory=lambda: ["omarchy", "agent", "prompt", "{prompt}"])
+    herdr_command: list[str] = field(default_factory=lambda: ["herdr", "agent", "prompt", "default", "{prompt}"])
+    wake_phrases: list[str] = field(default_factory=lambda: ["herd", "herdr"])
     token: str = ""
     local: ModelEndpoint = field(default_factory=ModelEndpoint)
     cloud: ModelEndpoint = field(default_factory=ModelEndpoint)
@@ -95,10 +96,13 @@ def load_config(path: Path | None = None) -> Config:
     classifier = str(data.get("classifier") or "rules").strip().lower()
     if classifier not in {"rules", "local", "cloud"}:
         raise ValueError(f"classifier must be rules|local|cloud, got {classifier}")
-    command = data.get("herdr_command") or ["omarchy", "agent", "prompt", "{prompt}"]
+    command = data.get("herdr_command") or ["herdr", "agent", "prompt", "default", "{prompt}"]
     if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
         raise ValueError("herdr_command must be a list of strings")
-    phrases = data.get("wake_phrases") or ["herd", "herdr", "agent", "go do"]
+    agent_command = data.get("agent_command") or ["omarchy", "agent", "prompt", "{prompt}"]
+    if not isinstance(agent_command, list) or not all(isinstance(part, str) for part in agent_command):
+        raise ValueError("agent_command must be a list of strings")
+    phrases = data.get("wake_phrases") or ["herd", "herdr"]
     if not isinstance(phrases, list) or not all(isinstance(part, str) for part in phrases):
         raise ValueError("wake_phrases must be a list of strings")
     raw_actions = data.get("actions") or {}
@@ -111,7 +115,8 @@ def load_config(path: Path | None = None) -> Config:
         bind_port=int(data.get("bind_port") or 8787),
         classifier=classifier,
         notes_inbox=str(data.get("notes_inbox") or "~/Notes/inbox"),
-        agent_enabled=bool(data.get("agent_enabled", False)),
+        agent_enabled=bool(data.get("agent_enabled", True)),
+        agent_command=list(agent_command),
         herdr_command=list(command),
         wake_phrases=[part.strip() for part in phrases if str(part).strip()],
         token=str(data.get("token") or ""),

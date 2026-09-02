@@ -72,7 +72,7 @@ priority = 80        # higher wins among overlapping wakes
 fields = ["title", "body"]
 ```
 
-`id` must be `^[a-z][a-z0-9_-]{0,31}$`. Do not reuse `note`, `reminder`, `calendar`, or `herdr` unless you intend to replace them.
+`id` must be `^[a-z][a-z0-9_-]{0,31}$`. Do not reuse `note`, `reminder`, `calendar`, `agent`, or `herdr` unless you intend to replace them.
 
 ## Other plugins
 

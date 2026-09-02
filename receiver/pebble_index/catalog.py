@@ -8,7 +8,7 @@ from pathlib import Path
 from .paths import action_search_paths
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
-BUILTIN_IDS = ("note", "reminder", "calendar", "herdr")
+BUILTIN_IDS = ("note", "reminder", "calendar", "herdr", "agent")
 MATCH_KINDS = ("wake", "relative", "dateish", "regex", "default")
 
 
@@ -54,9 +54,12 @@ class Catalog:
     def all(self) -> list[ActionSpec]:
         return sorted(self.specs.values(), key=lambda spec: (-spec.priority, spec.id))
 
-    def default_id(self) -> str:
+    def default_id(self, agent_enabled: bool = True) -> str:
         for spec in self.all():
-            if spec.default and spec.enabled:
+            if spec.default and spec.available(agent_enabled):
+                return spec.id
+        for spec in self.all():
+            if spec.builtin == "note" and spec.enabled:
                 return spec.id
         return "note"
 
@@ -88,15 +91,27 @@ def builtin_specs() -> list[ActionSpec]:
     return [
         ActionSpec(
             id="herdr",
-            label="Agent",
-            description="Send the rest of the transcript to the desktop agent. Only if it starts with a wake phrase.",
+            label="Herdr",
+            description="Send the rest of the transcript to Herdr. Only if it starts with herd or herdr.",
             priority=100,
             builtin="herdr",
             match="wake",
-            wake=["herd", "herdr", "agent", "go do"],
+            wake=["herd", "herdr"],
             fields=["title", "prompt"],
             require=["agent_enabled"],
             glyph="󰚩",
+        ),
+        ActionSpec(
+            id="agent",
+            label="Agent",
+            description="Open omarchy agent with the transcript. Default when nothing else matches.",
+            priority=10,
+            builtin="agent",
+            default=True,
+            match="default",
+            fields=["title", "prompt"],
+            require=["agent_enabled"],
+            glyph="󰀎",
         ),
         ActionSpec(
             id="reminder",
@@ -121,11 +136,11 @@ def builtin_specs() -> list[ActionSpec]:
         ActionSpec(
             id="note",
             label="Note",
-            description="Inbox markdown note. Default when nothing else matches.",
+            description="Inbox markdown note. Use when the transcript starts with note.",
             priority=0,
             builtin="note",
-            default=True,
-            match="default",
+            match="wake",
+            wake=["note"],
             fields=["title", "body"],
             glyph="󰎞",
         ),

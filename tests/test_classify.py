@@ -22,10 +22,16 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertNotEqual(first, event_id("ring", "1700000000000", "hello!"))
 
-    def test_default_is_note(self) -> None:
+    def test_default_is_note_when_agent_disabled(self) -> None:
         action = classify_rules("buy oat milk", self.recorded, self.config)
         self.assertEqual(action.name, "note")
         self.assertEqual(action.title, "buy oat milk")
+
+    def test_default_is_omarchy_agent(self) -> None:
+        enabled = Config(agent_enabled=True, catalog=builtin_catalog())
+        action = classify_rules("buy oat milk", self.recorded, enabled)
+        self.assertEqual(action.name, "agent")
+        self.assertEqual(action.prompt, "buy oat milk")
 
     def test_relative_reminder(self) -> None:
         action = classify_rules("remind me in 20 minutes to check the oven", self.recorded, self.config)
@@ -45,10 +51,12 @@ class ClassifyTests(unittest.TestCase):
     def test_wake_phrase_must_be_at_start(self) -> None:
         enabled = Config(agent_enabled=True, catalog=builtin_catalog())
         buried = classify_rules("tell the estate agent I will be late", self.recorded, enabled)
-        self.assertEqual(buried.name, "note")
+        self.assertEqual(buried.name, "agent")
         woken = classify_rules("herdr summarise my inbox", self.recorded, enabled)
         self.assertEqual(woken.name, "herdr")
         self.assertEqual(woken.prompt, "summarise my inbox")
+        herd = classify_rules("herd open the logs", self.recorded, enabled)
+        self.assertEqual(herd.name, "herdr")
 
     def test_dated_phrase_becomes_calendar(self) -> None:
         action = classify_rules("meeting tomorrow 3pm with Sam", self.recorded, self.config)
@@ -56,10 +64,17 @@ class ClassifyTests(unittest.TestCase):
         self.assertIsNotNone(action.when)
         self.assertEqual(action.when.hour, 15)
 
-    def test_agent_word_alone_is_not_enough(self) -> None:
+    def test_agent_word_is_not_herdr(self) -> None:
         enabled = Config(agent_enabled=True, catalog=builtin_catalog())
-        action = classify_rules("agent", self.recorded, enabled)
+        action = classify_rules("agent summarise my inbox", self.recorded, enabled)
+        self.assertEqual(action.name, "agent")
+        self.assertNotEqual(action.name, "herdr")
+
+    def test_note_wake_writes_inbox(self) -> None:
+        enabled = Config(agent_enabled=True, catalog=builtin_catalog())
+        action = classify_rules("note buy oat milk", self.recorded, enabled)
         self.assertEqual(action.name, "note")
+        self.assertEqual(action.title, "buy oat milk")
 
     def test_parse_model_json_accepts_fences(self) -> None:
         data = parse_model_json('```json\n{"action":"note","title":"milk"}\n```')

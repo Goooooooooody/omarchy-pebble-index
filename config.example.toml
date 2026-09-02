@@ -4,9 +4,10 @@
 bind_port = 8787
 classifier = "rules" # rules | local | cloud
 notes_inbox = "~/Notes/inbox"
-agent_enabled = false
-herdr_command = ["omarchy", "agent", "prompt", "{prompt}"]
-wake_phrases = ["herd", "herdr", "agent", "go do"]
+agent_enabled = true
+agent_command = ["omarchy", "agent", "prompt", "{prompt}"]
+herdr_command = ["herdr", "agent", "prompt", "default", "{prompt}"]
+wake_phrases = ["herd", "herdr"]
 token = "CHANGE_ME"
 
 # HTTP classifiers leave api_key empty and read OPENROUTER_API_KEY from

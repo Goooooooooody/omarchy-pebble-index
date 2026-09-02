@@ -4,7 +4,7 @@
   "name": "Pebble Index",
   "version": "0.1.0",
   "author": "goody",
-  "description": "Receive Pebble Index webhooks and dispatch notes, reminders, calendar events, or an agent.",
+  "description": "Receive Pebble Index webhooks and dispatch omarchy agent, notes, reminders, calendar, or Herdr.",
   "license": "MIT",
   "kinds": ["bar-widget"],
   "entryPoints": {

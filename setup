@@ -98,8 +98,8 @@ CoreApp → Index → Webhook:
   Send:   Transcription
   Trigger: whichever gesture you want
 
-The agent sink is OFF until you set agent_enabled = true in:
-  ${CONFIG_FILE}
+Unclassified transcripts open omarchy agent. Say “herdr …” for Herdr.
+Set agent_enabled = false in ${CONFIG_FILE} to fall back to notes.
 
 Uninstall with: ${SCRIPT_DIR}/uninstall
 Menu-only plugin removal leaves this systemd unit running.

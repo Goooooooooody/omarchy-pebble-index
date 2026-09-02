@@ -141,6 +141,7 @@ Panel {
     if (action === "reminder") return "󰢌"
     if (action === "calendar") return "󰃭"
     if (action === "herdr") return "󰚩"
+    if (action === "agent") return "󰀎"
     if (action === "note") return "󰎞"
     return "󰻃"
   }
@@ -151,7 +152,8 @@ Panel {
     if (status === "pending") return "Pending"
     if (action === "reminder") return "Reminder"
     if (action === "calendar") return "Calendar"
-    if (action === "herdr") return "Agent"
+    if (action === "herdr") return "Herdr"
+    if (action === "agent") return "Agent"
     if (action === "note") return "Note"
     if (action) return action.charAt(0).toUpperCase() + action.slice(1)
     return "Capture"

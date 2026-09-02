@@ -30,7 +30,9 @@ def dispatch(action: Action, config: Config, event_id: str) -> str:
     spec = config.actions().get(action.name)
     if spec is None:
         raise DispatchError(f"unknown action {action.name}")
-    builtin = spec.builtin or (action.name if action.name in {"note", "reminder", "calendar", "herdr"} else "")
+    builtin = spec.builtin or (
+        action.name if action.name in {"note", "reminder", "calendar", "herdr", "agent"} else ""
+    )
     if builtin == "note":
         return write_note(action, config, event_id)
     if builtin == "reminder":
@@ -45,7 +47,9 @@ def dispatch(action: Action, config: Config, event_id: str) -> str:
                 return f"calendar-failed-note:{path}"
             raise
     if builtin == "herdr":
-        return spawn_agent(action, config)
+        return spawn_prompt(action, config.herdr_command, config, sink="herdr")
+    if builtin == "agent":
+        return spawn_prompt(action, config.agent_command, config, sink="agent")
     if spec.command:
         try:
             return run_command(spec, action, event_id)
@@ -165,14 +169,14 @@ def create_calendar(action: Action) -> str:
     return f"caldir:{start}:{title}"
 
 
-def spawn_agent(action: Action, config: Config) -> str:
+def spawn_prompt(action: Action, template: list[str], config: Config, *, sink: str) -> str:
     if not config.agent_enabled:
         raise DispatchError("agent sink is disabled")
     prompt = action.prompt or action.title
-    command = [part.replace("{prompt}", prompt) for part in config.herdr_command]
+    command = [part.replace("{prompt}", prompt) for part in template]
     if not command:
-        raise DispatchError("herdr_command is empty")
-    # omarchy-agent execs a terminal and does not return; do not wait on it.
+        raise DispatchError(f"{sink} command is empty")
+    # omarchy-agent / herdr may exec a TUI and not return; do not wait.
     try:
         subprocess.Popen(
             command,
@@ -184,7 +188,7 @@ def spawn_agent(action: Action, config: Config) -> str:
         )
     except OSError as error:
         raise DispatchError(str(error)) from error
-    return f"agent:{command[0]}"
+    return f"{sink}:{command[0]}"
 
 
 def _run(command: list[str], timeout: int) -> None:

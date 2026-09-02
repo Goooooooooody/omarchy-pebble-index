@@ -79,7 +79,8 @@ def classify_rules(text: str, recorded_at: datetime, config: Config) -> Action:
         spec, matched = woken
         remainder = cleaned[matched.end() :].strip() or cleaned
         if not spec.available(config.agent_enabled):
-            return Action(catalog.default_id(), title=_title(cleaned), body=text)
+            fallback = catalog.default_id(config.agent_enabled)
+            return Action(fallback, title=_title(cleaned), prompt=cleaned, body=text)
         return Action(spec.id, title=_title(remainder), prompt=remainder, body=text)
 
     reminder = catalog.get("reminder")
@@ -104,7 +105,8 @@ def classify_rules(text: str, recorded_at: datetime, config: Config) -> Action:
     if regex is not None:
         return Action(regex.id, title=_title(cleaned), body=text)
 
-    return Action(catalog.default_id(), title=_title(cleaned), body=text)
+    fallback = catalog.default_id(config.agent_enabled)
+    return Action(fallback, title=_title(cleaned), prompt=cleaned, body=text)
 
 
 def _title(text: str) -> str:
@@ -195,7 +197,7 @@ def classify_http(text: str, recorded_at: datetime, endpoint: ModelEndpoint, con
         "minutes": "integer minutes from now for reminder, or null",
         "when": "RFC3339 local datetime for calendar, or null",
         "body": "full text",
-        "prompt": "agent prompt if herdr",
+        "prompt": "agent or herdr prompt",
     }
     body = {
         "model": endpoint.model,
@@ -248,10 +250,10 @@ def classify_http(text: str, recorded_at: datetime, endpoint: ModelEndpoint, con
 
 def action_from_model(data: dict[str, Any], text: str, recorded_at: datetime, config: Config) -> Action:
     catalog = config.actions()
-    name = str(data.get("action") or catalog.default_id()).strip().lower()
+    name = str(data.get("action") or catalog.default_id(config.agent_enabled)).strip().lower()
     spec = catalog.get(name)
     if spec is None or not spec.available(config.agent_enabled):
-        name = catalog.default_id()
+        name = catalog.default_id(config.agent_enabled)
         spec = catalog.get(name)
     title = _title(str(data.get("title") or text))
     body = str(data.get("body") or text)
@@ -276,7 +278,13 @@ def action_from_model(data: dict[str, Any], text: str, recorded_at: datetime, co
         try:
             parsed_minutes = int(minutes)
         except (TypeError, ValueError):
-            return Action(catalog.default_id(), title=title, body=body, extra=extra)
+            return Action(
+                catalog.default_id(config.agent_enabled),
+                title=title,
+                prompt=prompt,
+                body=body,
+                extra=extra,
+            )
         parsed_minutes = max(1, parsed_minutes)
         if parsed_minutes > 24 * 60:
             return Action(
@@ -289,10 +297,18 @@ def action_from_model(data: dict[str, Any], text: str, recorded_at: datetime, co
         return Action("reminder", title=title, minutes=parsed_minutes, body=body, extra=extra)
     if builtin == "calendar" or name == "calendar":
         if when is None:
-            return Action(catalog.default_id(), title=title, body=body, extra=extra)
+            return Action(
+                catalog.default_id(config.agent_enabled),
+                title=title,
+                prompt=prompt,
+                body=body,
+                extra=extra,
+            )
         return Action("calendar", title=title, when=when, body=body, extra=extra)
     if builtin == "herdr" or name == "herdr":
         return Action("herdr", title=title, prompt=prompt, body=body, extra=extra)
+    if builtin == "agent" or name == "agent":
+        return Action("agent", title=title, prompt=prompt or body, body=body, extra=extra)
     return Action(name, title=title, prompt=prompt, body=body, extra=extra)
 
 
