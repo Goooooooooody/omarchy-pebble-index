@@ -11,29 +11,34 @@ Plugin id: `io.github.goooooooooody.omarchy-pebble-index`
 - Omarchy with the Quattro plugin API
 - Python 3 (stdlib only)
 - Tailscale
-- `jq`, GNU `date`, `systemd --user`
+- GNU `date`, `systemd --user`
 - Optional: Caldir / Omarchy Google Calendar Clock for dated events
 - Optional: an OpenAI-compatible HTTP endpoint if you switch the classifier off `rules`
 
 ## Install
 
-From a checkout:
-
 ```bash
-./setup
-omarchy plugin add /path/to/omarchy-pebble-index --enable
+omarchy plugin add https://github.com/Goooooooooody/omarchy-pebble-index.git --enable
 ```
 
-`./setup` links this repo into `~/.config/omarchy/plugins/`, writes `~/.config/omarchy-pebble-index/config.toml` (mode 0600), copies `.env.example` to `~/.config/omarchy-pebble-index/.env` if that file is missing, creates `~/Notes/inbox`, and enables the user unit. It does not read OMP or other credential stores.
+Open the bar icon and click **Start receiver**. That writes `~/.config/omarchy-pebble-index/config.toml` (0600), copies `.env.example` to `.env` if missing, creates `~/Notes/inbox`, and enables the user unit. The panel then shows the Tailscale URL and bearer token to paste into CoreApp.
 
-`omarchy plugin add` alone does **not** start the daemon. Always run `./setup`. Removing the plugin from the Omarchy menu also leaves the unit running; use `./uninstall`.
+`omarchy plugin add` only installs the widget. Omarchy does not run plugin install hooks. The receiver is a `systemd --user` unit on purpose, so the widget starts it.
+
+From a checkout you can do the same work in a terminal: `./setup` or `pebble-index setup`. Neither reads OMP or other credential stores.
+
+Menu **Remove plugin** does not stop the unit. Use **Stop receiver** in the panel, or `./uninstall`. The unit also refuses to start if the plugin directory is gone.
+
+If `omarchy plugin add` says this id is already used by `io.github.goody.omarchy-pebble-index`, that is a leftover folder from the id rename. Remove it (`omarchy plugin remove io.github.goody.omarchy-pebble-index --yes`) and add again. On a machine that already has this checkout, skip the GitHub clone and run `./setup` so you keep the working tree.
 
 ## CoreApp webhook
+
+Shown in the widget after Start receiver. Same values from `pebble-index webhook`:
 
 ```text
 URL:    http://<tailscale-ipv4>:8787/webhook
 Header: Authorization
-Value:  Bearer <token from setup>
+Value:  Bearer <token from the widget>
 Send:   Transcription
 ```
 
@@ -47,7 +52,7 @@ Any device that has the bearer token can dispatch actions. Treat the token like 
 
 `classifier` in config is exactly one of `rules`, `local`, or `cloud`. There is no hidden fallback.
 
-- **rules** (default): `herd`/`herdr` at the start → Herdr; `note …` → inbox markdown; `in N minutes/hours` → reminder; GNU `date`-parseable clock/date → calendar; otherwise `omarchy agent`. Relative delays longer than 24 hours become calendar events.
+- **rules** (default): `herd`/`herdr` at the start → Herdr; `note …` → inbox markdown; `in N minutes/hours` → reminder; spoken dates and times → calendar; otherwise `omarchy agent`. Relative delays longer than 24 hours, or `in N days/weeks`, become calendar events.
 - **local / cloud**: OpenAI-compatible `POST /v1/chat/completions`. If the endpoint is unset or errors, dispatch fails and you get a notification.
 
 API keys stay out of `config.toml`. Put `OPENROUTER_API_KEY` in `~/.config/omarchy-pebble-index/.env` (0600). The user unit loads that file via `EnvironmentFile`. Example cloud settings (OMP's GLM Flash):
@@ -77,6 +82,8 @@ Add a community sink by dropping a TOML file — see [ACTIONS.md](ACTIONS.md). `
 
 Any other Omarchy plugin can ship `pebble-index/*.toml`. Those commands run as your user after a valid webhook. Treat third-party Index actions like shell plugins: only install plugins you trust.
 
+Desktop voice (VoxType overlay) is a sibling plugin: [omarchy-pebble-voice](https://github.com/Goooooooooody/omarchy-pebble-voice). It calls `pebble-index capture` and can attach a focused-window screenshot for “what is this” / “how does this work”.
+
 The receiver unit may write to `~/Notes` and the pebble-index config/state/data dirs. If an action needs another path, add a systemd drop-in:
 
 ```ini
@@ -104,7 +111,7 @@ Duplicates (same client + recordedAt + transcription) return `{"status":"duplica
 
 ## Widget
 
-Left-click the bar icon for the inbox. Open a note, show reminders, or toggle the calendar plugin. **Re-run** re-dispatches and will create another reminder/event/note.
+Left-click the bar icon for the inbox. First open: **Start receiver**, then copy the CoreApp URL and token. Open a note, show reminders, or toggle the calendar plugin. **Re-run** re-dispatches and will create another reminder/event/note. **Stop receiver** leaves notes and config.
 
 ## License
 

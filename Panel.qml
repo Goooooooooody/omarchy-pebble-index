@@ -16,14 +16,30 @@ Panel {
   property int selectedIndex: 0
   property bool cursorActive: false
   property bool refreshing: false
+  property bool settingUp: false
+  property bool stopping: false
   property string lastAction: ""
+  property string setupError: ""
+  property string copied: ""
 
   property var state: ({
     online: false,
     pending: 0,
     failed: 0,
     total: 0,
+    provisioned: false,
     events: []
+  })
+
+  property var webhook: ({
+    ok: false,
+    provisioned: false,
+    url: "",
+    token: "",
+    authorization: "",
+    address: "",
+    port: 8787,
+    error: ""
   })
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -36,6 +52,9 @@ Panel {
   readonly property string cli: pluginHome + "/bin/pebble-index"
 
   readonly property bool online: state && state.online === true
+  readonly property bool provisioned: (state && state.provisioned === true) || (webhook && webhook.provisioned === true)
+  readonly property bool hasWebhook: !!(webhook && webhook.provisioned && webhook.url)
+  readonly property bool installBusy: settingUp || stopping
   readonly property var events: state && Array.isArray(state.events) ? state.events : []
   readonly property int failed: Number(state.failed || 0)
   readonly property int pending: Number(state.pending || 0)
@@ -44,6 +63,9 @@ Panel {
   readonly property color iconColor: online ? (failed > 0 ? urgent : foreground) : dim
   readonly property color barIconColor: online ? (failed > 0 ? urgent : barForeground) : Qt.darker(barForeground, 1.55)
   readonly property string heroMeta: {
+    if (settingUp) return "Starting"
+    if (stopping) return "Stopping"
+    if (!provisioned) return "Needs setup"
     if (!online) return "Not running"
     if (failed > 0) return "Dispatch failed"
     if (pending > 0) return "Working"
@@ -51,6 +73,9 @@ Panel {
     return "Up to date"
   }
   readonly property string heroDetail: {
+    if (settingUp) return "…"
+    if (stopping) return "…"
+    if (!provisioned) return "Start"
     if (!online) return "Offline"
     if (failed > 0) return failed + " failed"
     if (pending > 0) return pending + " pending"
@@ -84,6 +109,62 @@ Panel {
     lastAction = args.join(" ")
     actionProcess.command = [root.cli].concat(args)
     actionProcess.running = true
+  }
+
+  function startReceiver() {
+    if (installProcess.running) return
+    settingUp = true
+    setupError = ""
+    lastAction = "setup"
+    installProcess.command = [root.cli, "setup", "--json"]
+    installProcess.running = true
+  }
+
+  function stopReceiver() {
+    if (installProcess.running) return
+    stopping = true
+    setupError = ""
+    lastAction = "uninstall"
+    installProcess.command = [root.cli, "uninstall", "--json"]
+    installProcess.running = true
+  }
+
+  function loadWebhook() {
+    if (webhookProcess.running) return
+    webhookProcess.running = true
+  }
+
+  function copyWebhook(field) {
+    if (copyProcess.running) return
+    lastAction = "copy " + field
+    copyProcess.command = [root.cli, "webhook", "--copy", field]
+    copyProcess.running = true
+  }
+
+  function parseWebhook(raw) {
+    try {
+      var parsed = JSON.parse(String(raw || ""))
+      if (parsed && typeof parsed === "object") webhook = parsed
+    } catch (e) {
+    }
+  }
+
+  function parseInstall(raw, command) {
+    try {
+      var parsed = JSON.parse(String(raw || ""))
+      if (!parsed || typeof parsed !== "object") {
+        setupError = "Could not read setup output"
+        return
+      }
+      if (command === "setup") {
+        webhook = parsed
+        setupError = parsed.ok === false ? (parsed.error || "Could not start the receiver") : (parsed.error || "")
+        return
+      }
+      setupError = parsed.ok === false ? (parsed.error || "Could not stop the receiver") : ""
+    } catch (e) {
+      setupError = "Could not read setup output"
+    }
   }
 
   function ensureCursor() {
@@ -124,7 +205,8 @@ Panel {
 
   function activateCursor() {
     if (focusSection === "header") {
-      refresh()
+      if (!online && !installBusy) startReceiver()
+      else refresh()
       return
     }
     var item = selectedEvent()
@@ -180,6 +262,7 @@ Panel {
     cursorActive = false
     if (panelFlick) panelFlick.contentY = 0
     refresh()
+    loadWebhook()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -206,12 +289,59 @@ Panel {
     }
   }
 
+  Process {
+    id: installProcess
+    running: false
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseInstall(text, root.lastAction)
+    }
+    onExited: function(exitCode) {
+      var command = root.lastAction
+      root.settingUp = false
+      root.stopping = false
+      root.refresh()
+      root.loadWebhook()
+      if (exitCode !== 0 && root.setupError === "")
+        root.setupError = command === "uninstall" ? "Could not stop the receiver" : "Could not start the receiver"
+    }
+  }
+
+  Process {
+    id: webhookProcess
+    command: [root.cli, "webhook", "--json"]
+    running: false
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseWebhook(text)
+    }
+  }
+
+  Process {
+    id: copyProcess
+    running: false
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.copied = root.lastAction.indexOf("token") >= 0 ? "token" : (root.lastAction.indexOf("authorization") >= 0 ? "authorization" : "url")
+        copyClear.restart()
+      } else {
+        root.setupError = "Could not copy to the clipboard"
+      }
+    }
+  }
+
   Timer {
     interval: 4000
     running: true
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refresh()
+  }
+
+  Timer {
+    id: copyClear
+    interval: 2000
+    onTriggered: root.copied = ""
   }
 
   BarIconButton {
@@ -250,6 +380,8 @@ Panel {
       onTextKey: function(text) {
         if (text === "r") root.refresh()
         else if (text === "R") root.rerunSelected()
+        else if (text === "s") root.startReceiver()
+        else if (text === "x" && root.provisioned) root.stopReceiver()
         else if (text === "o" || text === "O") root.activateCursor()
       }
 
@@ -322,11 +454,118 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
               anchors.margins: Style.space(12)
               textFormat: Text.PlainText
-              text: "The webhook receiver is not running. Run the plugin setup script."
+              text: root.provisioned
+                ? "The webhook receiver is not running."
+                : "Start the receiver to get a Tailscale URL and token for CoreApp."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               wrapMode: Text.WordWrap
+            }
+          }
+
+          CursorSurface {
+            visible: root.setupError !== ""
+            width: parent.width
+            implicitHeight: setupErrorText.implicitHeight + Style.spacing.rowPaddingX
+            foreground: root.urgent
+
+            Text {
+              id: setupErrorText
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.margins: Style.space(12)
+              textFormat: Text.PlainText
+              text: root.setupError
+              color: root.urgent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              wrapMode: Text.WordWrap
+            }
+          }
+
+          CursorSurface {
+            visible: !root.online
+            width: parent.width
+            implicitHeight: startLabel.implicitHeight + Style.spacing.rowPaddingX
+            foreground: root.foreground
+
+            MouseArea {
+              anchors.fill: parent
+              acceptedButtons: Qt.LeftButton
+              hoverEnabled: true
+              cursorShape: root.installBusy ? Qt.ArrowCursor : Qt.PointingHandCursor
+              enabled: !root.installBusy
+              onClicked: root.startReceiver()
+            }
+
+            Text {
+              id: startLabel
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.margins: Style.space(12)
+              textFormat: Text.PlainText
+              text: root.settingUp ? "Starting receiver…" : "Start receiver"
+              color: root.installBusy ? root.dim : root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+            }
+          }
+
+          PanelSeparator {
+            visible: root.hasWebhook || root.online
+            foreground: root.foreground
+          }
+
+          Column {
+            visible: root.hasWebhook
+            width: parent.width
+            spacing: Style.space(10)
+
+            PanelSectionHeader {
+              text: "COREAPP"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Text {
+              width: parent.width
+              leftPadding: Style.space(12)
+              rightPadding: Style.space(12)
+              textFormat: Text.PlainText
+              text: "Paste into Index → Webhook on your phone."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            WebhookRow {
+              width: parent.width
+              label: "URL"
+              value: String(root.webhook.url || "")
+              field: "url"
+            }
+
+            WebhookRow {
+              width: parent.width
+              label: "Authorization"
+              value: String(root.webhook.authorization || "")
+              field: "authorization"
+            }
+
+            Text {
+              visible: root.copied !== ""
+              width: parent.width
+              leftPadding: Style.space(12)
+              rightPadding: Style.space(12)
+              textFormat: Text.PlainText
+              text: root.copied === "url" ? "Copied URL" : "Copied bearer token"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
           }
 
@@ -383,7 +622,113 @@ Panel {
               }
             }
           }
+
+          PanelSeparator {
+            visible: root.provisioned
+            foreground: root.foreground
+          }
+
+          Column {
+            visible: root.provisioned
+            width: parent.width
+            spacing: Style.space(6)
+
+            CursorSurface {
+              width: parent.width
+              implicitHeight: stopLabel.implicitHeight + Style.spacing.rowPaddingX
+              foreground: root.urgent
+
+              MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                hoverEnabled: true
+                cursorShape: root.installBusy ? Qt.ArrowCursor : Qt.PointingHandCursor
+                enabled: !root.installBusy
+                onClicked: root.stopReceiver()
+              }
+
+              Text {
+                id: stopLabel
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Style.space(12)
+                textFormat: Text.PlainText
+                text: root.stopping ? "Stopping receiver…" : "Stop receiver"
+                color: root.installBusy ? root.dim : root.urgent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
+            Text {
+              width: parent.width
+              leftPadding: Style.space(12)
+              rightPadding: Style.space(12)
+              textFormat: Text.PlainText
+              text: "Leaves notes and config. Menu plugin removal does not stop this."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+          }
         }
+      }
+    }
+  }
+
+  component WebhookRow: CursorSurface {
+    id: hookRow
+    property string label: ""
+    property string value: ""
+    property string field: "url"
+
+    foreground: root.foreground
+    implicitHeight: Math.max(hookText.implicitHeight, hookCopy.implicitHeight) + Style.spacing.rowPaddingX + Style.space(4)
+
+    RowLayout {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(12)
+      anchors.rightMargin: Style.space(8)
+      spacing: Style.space(8)
+
+      ColumnLayout {
+        Layout.fillWidth: true
+        spacing: Style.space(1)
+
+        Text {
+          textFormat: Text.PlainText
+          Layout.fillWidth: true
+          text: hookRow.label
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        Text {
+          id: hookText
+          textFormat: Text.PlainText
+          Layout.fillWidth: true
+          text: hookRow.value
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          wrapMode: Text.WrapAnywhere
+        }
+      }
+
+      PanelActionButton {
+        id: hookCopy
+        iconText: "󰆏"
+        tooltipText: root.copied === hookRow.field ? "Copied" : "Copy"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        enabled: hookRow.value !== ""
+        Layout.alignment: Qt.AlignVCenter
+        onClicked: root.copyWebhook(hookRow.field)
       }
     }
   }

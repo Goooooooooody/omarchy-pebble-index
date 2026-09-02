@@ -51,17 +51,19 @@ Rules classifier, in order:
 
 1. **wake** — phrase at the start (`shop oat milk`)
 2. built-in **relative** reminder (`in 20 minutes`)
-3. built-in **dateish** calendar (`tomorrow 3pm`)
+3. built-in **dateish** calendar (`tomorrow 3pm`, `Friday at 2`, `in 2 days`)
 4. **regex** — `match = "regex"` plus `pattern`
 5. **note**
 
-The model classifier sees every enabled action and its `description`. Write that line so a model can choose it.
+Wake, reminder, calendar, and regex matches run in every classifier mode, including `local` and `cloud`. The model only sees transcripts that those rules did not already claim.
+
+The model classifier also sees every enabled action and its `description`. Write that line so a model can choose it.
 
 Wake phrases need a word after them. `shop` alone is still a note.
 
 ## Command placeholders
 
-`{title}` `{body}` `{prompt}` `{minutes}` `{when}` `{id}` `{text}` `{dir}`
+`{title}` `{body}` `{prompt}` `{minutes}` `{when}` `{id}` `{text}` `{dir}` `{screenshot}`
 
 ```toml
 timeout = 15
@@ -70,6 +72,16 @@ fallback = "note"    # or "none" to fail the event
 require = []         # add "agent_enabled" to honor that config switch
 priority = 80        # higher wins among overlapping wakes
 fields = ["title", "body"]
+context = []         # add "active-window" to attach a focused-window screenshot
+```
+
+`context = ["active-window"]` screenshots the focused Hyprland window (via `grim`) before the command or agent runs. Prefer passing a path with `pebble-index capture --screenshot` when the desktop overlay is already up, so the capture is the window the user was looking at. Agent/herdr prompts then include that path.
+
+Desktop voice can also classify without Tailscale:
+
+```bash
+pebble-index classify --text "what is this"
+pebble-index capture --text "what is this" --client voice --screenshot /run/user/$UID/omarchy-pebble-voice/window.png
 ```
 
 `id` must be `^[a-z][a-z0-9_-]{0,31}$`. Do not reuse `note`, `reminder`, `calendar`, `agent`, or `herdr` unless you intend to replace them.

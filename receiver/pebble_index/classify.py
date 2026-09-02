@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -10,26 +9,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .calendar import parse_event
 from .catalog import match_regex, match_wake, model_action_names, model_instructions
 from .config import Config, ModelEndpoint
 
-WEEKDAYS = (
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-)
-DATEISH = re.compile(
-    r"\b("
-    r"today|tomorrow|tonight|next\s+\w+|"
-    + "|".join(WEEKDAYS)
-    + r"|\d{1,2}:\d{2}|\d{1,2}\s*(am|pm)|at\s+\d{1,2}"
-    r")\b",
-    re.IGNORECASE,
-)
 RELATIVE = re.compile(
     r"\b(?:remind\s+me\s+)?in\s+(\d+)\s+(minutes?|mins?|hours?|hrs?)\b",
     re.IGNORECASE,
@@ -62,9 +45,15 @@ class Action:
 
 
 def classify(text: str, recorded_at: datetime, config: Config) -> Action:
+    matched = classify_matched(text, recorded_at, config)
+    if matched is not None:
+        return matched
     mode = config.classifier
     if mode == "rules":
-        return classify_rules(text, recorded_at, config)
+        catalog = config.actions()
+        cleaned = FILLER.sub("", text.strip()).strip()
+        fallback = catalog.default_id(config.agent_enabled)
+        return Action(fallback, title=_title(cleaned), prompt=cleaned, body=text)
     endpoint = config.endpoint_for(mode)
     if not endpoint.configured():
         raise RuntimeError(f"{mode} classifier is selected but base_url/model are empty")
@@ -72,6 +61,16 @@ def classify(text: str, recorded_at: datetime, config: Config) -> Action:
 
 
 def classify_rules(text: str, recorded_at: datetime, config: Config) -> Action:
+    matched = classify_matched(text, recorded_at, config)
+    if matched is not None:
+        return matched
+    catalog = config.actions()
+    cleaned = FILLER.sub("", text.strip()).strip()
+    fallback = catalog.default_id(config.agent_enabled)
+    return Action(fallback, title=_title(cleaned), prompt=cleaned, body=text)
+
+
+def classify_matched(text: str, recorded_at: datetime, config: Config) -> Action | None:
     cleaned = FILLER.sub("", text.strip()).strip()
     catalog = config.actions()
     woken = match_wake(cleaned, catalog, config.wake_phrases)
@@ -97,16 +96,14 @@ def classify_rules(text: str, recorded_at: datetime, config: Config) -> Action:
             return Action(calendar.id, title=title, when=when, body=text)
         return Action(reminder.id, title=title, minutes=minutes, body=text)
 
-    when = parse_dateish(cleaned, recorded_at)
-    if when is not None and calendar is not None and calendar.enabled:
-        return Action(calendar.id, title=_title(cleaned), when=when, body=text)
+    parsed = parse_event(cleaned, recorded_at)
+    if parsed is not None and calendar is not None and calendar.enabled:
+        return Action(calendar.id, title=_title(parsed.title), when=parsed.when, body=text)
 
     regex = match_regex(cleaned, catalog, config.agent_enabled)
     if regex is not None:
-        return Action(regex.id, title=_title(cleaned), body=text)
-
-    fallback = catalog.default_id(config.agent_enabled)
-    return Action(fallback, title=_title(cleaned), prompt=cleaned, body=text)
+        return Action(regex.id, title=_title(cleaned), prompt=cleaned, body=text)
+    return None
 
 
 def _title(text: str) -> str:
@@ -118,38 +115,8 @@ def _title(text: str) -> str:
 
 
 def parse_dateish(text: str, recorded_at: datetime) -> datetime | None:
-    match = DATEISH.search(text)
-    if match is None:
-        return None
-    words = text[match.start() :].split()
-    for length in range(min(6, len(words)), 0, -1):
-        when = parse_local_datetime(" ".join(words[:length]), recorded_at)
-        if when is not None:
-            return when
-    return None
-
-
-def parse_local_datetime(text: str, recorded_at: datetime) -> datetime | None:
-    """Parse a human date with GNU date. Returns None if date cannot interpret it."""
-    try:
-        result = subprocess.run(
-            ["date", f"--date={text}", "+%Y-%m-%dT%H:%M:%S"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None
-    stamp = result.stdout.strip()
-    try:
-        naive = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S")
-    except ValueError:
-        return None
-    tz = recorded_at.tzinfo or datetime.now().astimezone().tzinfo
-    return naive.replace(tzinfo=tz)
+    parsed = parse_event(text, recorded_at)
+    return parsed.when if parsed is not None else None
 
 
 def _message_text(payload: dict[str, Any]) -> str:

@@ -94,6 +94,13 @@ def _connect() -> sqlite3.Connection:
 _CONN: sqlite3.Connection | None = None
 
 
+def reset_connection() -> None:
+    global _CONN
+    if _CONN is not None:
+        _CONN.close()
+        _CONN = None
+
+
 def connection() -> sqlite3.Connection:
     global _CONN
     if _CONN is None:

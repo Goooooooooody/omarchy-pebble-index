@@ -2,6 +2,7 @@
 Description=Omarchy Pebble Index webhook receiver
 After=tailscaled.service network-online.target
 Wants=tailscaled.service
+ConditionPathExists=%h/.config/omarchy/plugins/io.github.goooooooooody.omarchy-pebble-index/manifest.json
 
 [Service]
 Type=simple

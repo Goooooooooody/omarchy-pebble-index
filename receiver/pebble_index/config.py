@@ -89,7 +89,7 @@ def load_config(path: Path | None = None) -> Config:
     load_dotenv()
     target = path or config_path()
     if not target.is_file():
-        raise FileNotFoundError(f"Missing config: {target} (run ./setup)")
+        raise FileNotFoundError(f"Missing config: {target} (Start receiver in the widget)")
     data = tomllib.loads(target.read_text(encoding="utf-8"))
     local = data.get("local") or {}
     cloud = data.get("cloud") or {}

@@ -61,8 +61,83 @@ class ClassifyTests(unittest.TestCase):
     def test_dated_phrase_becomes_calendar(self) -> None:
         action = classify_rules("meeting tomorrow 3pm with Sam", self.recorded, self.config)
         self.assertEqual(action.name, "calendar")
-        self.assertIsNotNone(action.when)
-        self.assertEqual(action.when.hour, 15)
+        self.assertEqual(action.when, datetime(2026, 9, 3, 15, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(action.title, "meeting with Sam")
+
+
+class CalendarParseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.recorded = datetime(2026, 9, 2, 11, 0, tzinfo=ZoneInfo("Europe/London"))
+        self.config = Config(agent_enabled=True, catalog=builtin_catalog())
+
+    def _cal(self, text: str):
+        return classify_rules(text, self.recorded, self.config)
+
+    def test_spoken_pm_and_title_strip(self) -> None:
+        action = self._cal("meeting tomorrow at 3 p.m. with Sam")
+        self.assertEqual(action.name, "calendar")
+        self.assertEqual(action.when, datetime(2026, 9, 3, 15, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(action.title, "meeting with Sam")
+
+    def test_on_friday_keeps_the_clock(self) -> None:
+        action = self._cal("lunch on Friday at 2pm")
+        self.assertEqual(action.name, "calendar")
+        self.assertEqual(action.when, datetime(2026, 9, 4, 14, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(action.title, "lunch")
+
+    def test_bare_friday_hour_is_afternoon(self) -> None:
+        action = self._cal("lunch Friday at 2")
+        self.assertEqual(action.when, datetime(2026, 9, 4, 14, 0, tzinfo=ZoneInfo("Europe/London")))
+
+    def test_past_clock_today_rolls_forward(self) -> None:
+        action = self._cal("standup at 9am")
+        self.assertEqual(action.when, datetime(2026, 9, 3, 9, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(action.title, "standup")
+
+    def test_bare_hour_and_oclock(self) -> None:
+        nine = self._cal("standup at 9")
+        self.assertEqual(nine.when, datetime(2026, 9, 3, 9, 0, tzinfo=ZoneInfo("Europe/London")))
+        three = self._cal("catch up at 3 o'clock")
+        self.assertEqual(three.when, datetime(2026, 9, 2, 15, 0, tzinfo=ZoneInfo("Europe/London")))
+
+    def test_tonight_and_evening(self) -> None:
+        dinner = self._cal("dinner tonight at 7")
+        self.assertEqual(dinner.when, datetime(2026, 9, 2, 19, 0, tzinfo=ZoneInfo("Europe/London")))
+        drinks = self._cal("this evening drinks with Sam")
+        self.assertEqual(drinks.when, datetime(2026, 9, 2, 18, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(drinks.title, "drinks with Sam")
+
+    def test_noon_and_afternoon_clock(self) -> None:
+        noon = self._cal("lunch tomorrow noon")
+        self.assertEqual(noon.when, datetime(2026, 9, 3, 12, 0, tzinfo=ZoneInfo("Europe/London")))
+        half = self._cal("3:30 tomorrow afternoon")
+        self.assertEqual(half.when, datetime(2026, 9, 3, 15, 30, tzinfo=ZoneInfo("Europe/London")))
+
+    def test_relative_days_are_calendar(self) -> None:
+        taxes = self._cal("in 2 days file taxes")
+        self.assertEqual(taxes.name, "calendar")
+        self.assertEqual(taxes.when.date().isoformat(), "2026-09-04")
+        self.assertEqual(taxes.title, "file taxes")
+        bank = self._cal("remind me in 3 days to call the bank")
+        self.assertEqual(bank.name, "calendar")
+        self.assertEqual(bank.when.date().isoformat(), "2026-09-05")
+        self.assertEqual(bank.title, "call the bank")
+
+    def test_month_day(self) -> None:
+        action = self._cal("meeting September 5th at 3pm")
+        self.assertEqual(action.when, datetime(2026, 9, 5, 15, 0, tzinfo=ZoneInfo("Europe/London")))
+        self.assertEqual(action.title, "meeting")
+
+    def test_bare_today_is_not_a_calendar(self) -> None:
+        action = self._cal("today I need to buy milk")
+        self.assertEqual(action.name, "agent")
+        self.assertIsNone(action.when)
+
+
+class ClassifyExtraTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.recorded = datetime(2026, 9, 2, 11, 0, tzinfo=ZoneInfo("Europe/London"))
+        self.config = Config(agent_enabled=False, catalog=builtin_catalog())
 
     def test_agent_word_is_not_herdr(self) -> None:
         enabled = Config(agent_enabled=True, catalog=builtin_catalog())

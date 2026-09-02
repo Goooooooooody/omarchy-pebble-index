@@ -155,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"status": "accepted", "id": eid})
 
 
-def process_event(event: Event, config: Config, *, force: bool = False) -> None:
+def process_event(event: Event, config: Config, *, force: bool = False, screenshot: str = "") -> None:
     if event.dispatch_status == "test":
         return
     if event.dispatch_status == "done" and not force:
@@ -169,6 +169,8 @@ def process_event(event: Event, config: Config, *, force: bool = False) -> None:
             recorded = recorded_at_from_ms(event.recorded_at_utc)
         action: Action = classify(event.transcription, recorded, config)
         action.extra["recorded_at"] = event.recorded_at_utc
+        if screenshot:
+            action.extra["screenshot"] = screenshot
         result = dispatch(action, config, event.id)
         mark_event(
             event.id,
@@ -205,7 +207,7 @@ def enqueue(event_key: str) -> None:
 def serve(config: Config | None = None) -> None:
     loaded = config or load_config()
     if not loaded.token:
-        raise SystemExit("config token is empty; run ./setup")
+        raise SystemExit("config token is empty; Start receiver in the widget")
     try:
         address = tailscale_ipv4()
     except BindError as error:

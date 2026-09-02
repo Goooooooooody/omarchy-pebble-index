@@ -1,4 +1,4 @@
-# Copied to ~/.config/omarchy-pebble-index/config.toml by ./setup
+# Copied to ~/.config/omarchy-pebble-index/config.toml by Start receiver / setup
 # chmod 0600. Do not commit a real token.
 
 bind_port = 8787

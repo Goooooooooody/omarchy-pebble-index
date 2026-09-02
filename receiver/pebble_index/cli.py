@@ -3,8 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from pathlib import Path
 
 from .config import load_config
+from .ingest import capture_transcript, classify_payload, spec_view
+from .install import (
+    InstallError,
+    copy_field,
+    format_setup,
+    format_teardown,
+    is_provisioned,
+    provision,
+    teardown,
+    webhook_payload,
+)
 from .notify import notify
 from .server import process_event, serve
 from .store import Event, get_event, list_events, offline_state, write_state_snapshot
@@ -31,11 +43,34 @@ def main(argv: list[str] | None = None) -> int:
     open_cmd.add_argument("event_id")
     actions_cmd = sub.add_parser("actions", help="list loaded actions")
     actions_cmd.add_argument("--json", action="store_true")
+    capture = sub.add_parser("capture", help="classify and dispatch a local transcript")
+    capture.add_argument("--text")
+    capture.add_argument("--file")
+    capture.add_argument("--client", default="voice")
+    capture.add_argument("--trigger", default="overlay")
+    capture.add_argument("--screenshot")
+    classify_cmd = sub.add_parser("classify", help="classify a transcript without dispatching")
+    classify_cmd.add_argument("--text")
+    classify_cmd.add_argument("--file")
+    classify_cmd.add_argument("--screenshot")
+    setup_cmd = sub.add_parser("setup", help="write config, enable the user unit, print CoreApp webhook")
+    setup_cmd.add_argument("--json", action="store_true")
+    uninstall_cmd = sub.add_parser("uninstall", help="stop the user unit; leave notes and config")
+    uninstall_cmd.add_argument("--json", action="store_true")
+    webhook_cmd = sub.add_parser("webhook", help="show or copy the CoreApp URL and bearer token")
+    webhook_cmd.add_argument("--json", action="store_true")
+    webhook_cmd.add_argument("--copy", choices=["url", "token", "authorization"])
 
     args = parser.parse_args(argv)
     if args.cmd == "serve":
         serve()
         return 0
+    if args.cmd == "setup":
+        return _setup(args.json)
+    if args.cmd == "uninstall":
+        return _uninstall(args.json)
+    if args.cmd == "webhook":
+        return _webhook(args.json, args.copy)
     if args.cmd == "status":
         return _status(args.json)
     if args.cmd == "inbox":
@@ -52,6 +87,10 @@ def main(argv: list[str] | None = None) -> int:
         return _open(args.event_id)
     if args.cmd == "actions":
         return _actions(args.json)
+    if args.cmd == "capture":
+        return _capture(args)
+    if args.cmd == "classify":
+        return _classify(args)
     return 2
 
 
@@ -86,12 +125,74 @@ def _status(as_json: bool) -> int:
     else:
         payload = offline_state()
         payload["online"] = False
+    payload["provisioned"] = is_provisioned()
     if as_json:
         print(json.dumps(payload))
     else:
         print("online" if payload.get("online") else "offline")
         print(f"events={payload.get('total', 0)} pending={payload.get('pending', 0)} failed={payload.get('failed', 0)}")
     return 0
+
+
+def _setup(as_json: bool) -> int:
+    try:
+        payload = provision()
+    except InstallError as error:
+        if as_json:
+            print(json.dumps({"ok": False, "provisioned": is_provisioned(), "error": str(error)}))
+        else:
+            print(error, flush=True)
+        return 1
+    if as_json:
+        print(json.dumps(payload))
+    else:
+        print(format_setup(payload), end="")
+        if payload.get("error"):
+            print(payload["error"], flush=True)
+    return 0 if payload.get("ok") else 1
+
+
+def _uninstall(as_json: bool) -> int:
+    try:
+        payload = teardown()
+    except InstallError as error:
+        if as_json:
+            print(json.dumps({"ok": False, "error": str(error)}))
+        else:
+            print(error, flush=True)
+        return 1
+    if as_json:
+        print(json.dumps(payload))
+    else:
+        print(format_teardown(), end="")
+    return 0
+
+
+def _webhook(as_json: bool, copy: str | None) -> int:
+    if copy:
+        try:
+            payload = copy_field(copy)
+        except InstallError as error:
+            if as_json:
+                print(json.dumps({"ok": False, "error": str(error)}))
+            else:
+                print(error, flush=True)
+            return 1
+        if as_json:
+            print(json.dumps(payload))
+        return 0
+    payload = webhook_payload()
+    if as_json:
+        print(json.dumps(payload))
+    else:
+        if payload["provisioned"]:
+            print(f"URL:   {payload['url']}")
+            print(f"Auth:  {payload['authorization']}")
+            if payload.get("error"):
+                print(payload["error"], flush=True)
+        else:
+            print(payload.get("error") or "receiver is not set up", flush=True)
+    return 0 if payload.get("ok") else 1
 
 
 def _replay(event_id: str, *, force: bool) -> int:
@@ -116,19 +217,7 @@ def _actions(as_json: bool) -> int:
     config = load_config()
     rows = []
     for spec in config.actions().all():
-        origin = str(spec.source) if spec.source else "builtin"
-        rows.append(
-            {
-                "id": spec.id,
-                "label": spec.label,
-                "enabled": spec.enabled,
-                "available": spec.available(config.agent_enabled),
-                "match": spec.match,
-                "priority": spec.priority,
-                "builtin": spec.builtin or None,
-                "source": origin,
-            }
-        )
+        rows.append(spec_view(spec, agent_enabled=config.agent_enabled))
     if as_json:
         print(json.dumps({"actions": rows}))
         return 0
@@ -171,3 +260,36 @@ def _resolve(event_id: str) -> Event | None:
         return event
     matches = [item for item in list_events(200) if item.id.startswith(event_id)]
     return matches[0] if len(matches) == 1 else None
+
+
+def _read_text(args: argparse.Namespace) -> str:
+    if args.text:
+        return args.text
+    if args.file:
+        return Path(args.file).expanduser().read_text(encoding="utf-8")
+    raise SystemExit("pass --text or --file")
+
+
+def _capture(args: argparse.Namespace) -> int:
+    try:
+        payload = capture_transcript(
+            _read_text(args),
+            client=args.client,
+            trigger=args.trigger,
+            screenshot=args.screenshot or "",
+        )
+    except (OSError, ValueError, FileNotFoundError, RuntimeError) as error:
+        print(json.dumps({"status": "error", "detail": str(error)}))
+        return 1
+    print(json.dumps(payload))
+    return 0 if payload.get("status") in {"done", "duplicate", "test"} else 1
+
+
+def _classify(args: argparse.Namespace) -> int:
+    try:
+        payload = classify_payload(_read_text(args), screenshot=args.screenshot or "")
+    except (OSError, ValueError, FileNotFoundError) as error:
+        print(json.dumps({"status": "error", "detail": str(error)}))
+        return 1
+    print(json.dumps(payload))
+    return 0

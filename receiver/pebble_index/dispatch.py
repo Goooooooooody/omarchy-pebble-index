@@ -9,6 +9,8 @@ from pathlib import Path
 from .catalog import ActionSpec
 from .classify import Action
 from .config import Config
+from .paths import data_dir
+from .screen import capture_active_window
 
 
 CALENDAR_CREATE_CANDIDATES = (
@@ -33,6 +35,7 @@ def dispatch(action: Action, config: Config, event_id: str) -> str:
     builtin = spec.builtin or (
         action.name if action.name in {"note", "reminder", "calendar", "herdr", "agent"} else ""
     )
+    attach_screenshot(spec, action, event_id)
     if builtin == "note":
         return write_note(action, config, event_id)
     if builtin == "reminder":
@@ -104,6 +107,7 @@ def _expand(part: str, spec: ActionSpec, action: Action, event_id: str) -> str:
         "{id}": event_id,
         "{text}": action.body or action.title,
         "{dir}": str(spec.source.parent) if spec.source else "",
+        "{screenshot}": str(action.extra.get("screenshot") or ""),
     }
     rendered = part
     for key, value in values.items():
@@ -169,10 +173,36 @@ def create_calendar(action: Action) -> str:
     return f"caldir:{start}:{title}"
 
 
+def attach_screenshot(spec: ActionSpec, action: Action, event_id: str) -> str:
+    existing = str(action.extra.get("screenshot") or "").strip()
+    if existing and Path(existing).is_file():
+        return existing
+    if "active-window" not in spec.context:
+        return ""
+    dest = data_dir() / "context" / f"{event_id[:12]}.png"
+    captured = capture_active_window(dest)
+    if captured is None:
+        return ""
+    action.extra["screenshot"] = str(captured)
+    return str(captured)
+
+
+def prompt_with_screenshot(action: Action) -> str:
+    prompt = action.prompt or action.title
+    screenshot = str(action.extra.get("screenshot") or "").strip()
+    if not screenshot:
+        return prompt
+    return (
+        f"{prompt}\n\n"
+        f"A screenshot of the focused window is at {screenshot}. "
+        "Open that image and use it as the visual context for this question."
+    )
+
+
 def spawn_prompt(action: Action, template: list[str], config: Config, *, sink: str) -> str:
     if not config.agent_enabled:
         raise DispatchError("agent sink is disabled")
-    prompt = action.prompt or action.title
+    prompt = prompt_with_screenshot(action)
     command = [part.replace("{prompt}", prompt) for part in template]
     if not command:
         raise DispatchError(f"{sink} command is empty")

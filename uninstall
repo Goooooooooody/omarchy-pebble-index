@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-PLUGIN_ID="io.github.goooooooooody.omarchy-pebble-index"
-UNIT="omarchy-pebble-index.service"
-BIN_LINK="${HOME}/.local/bin/pebble-index"
-
-systemctl --user disable --now "${UNIT}" 2>/dev/null || true
-rm -f "${HOME}/.config/systemd/user/${UNIT}"
-systemctl --user daemon-reload
-rm -f "${BIN_LINK}"
-
-echo "Stopped ${UNIT}."
-echo "Left config, inbox, and sqlite in place:"
-echo "  ~/.config/omarchy-pebble-index"
-echo "  ~/.local/share/omarchy-pebble-index"
-echo "  ~/.local/state/omarchy-pebble-index"
-echo "  ~/Notes/inbox"
-echo
-echo "Omarchy plugin files (if you used omarchy plugin add) are separate:"
-echo "  omarchy plugin remove ${PLUGIN_ID}"
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+exec "${ROOT}/bin/pebble-index" uninstall "$@"

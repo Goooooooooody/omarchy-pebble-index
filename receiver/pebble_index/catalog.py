@@ -10,6 +10,7 @@ from .paths import action_search_paths
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 BUILTIN_IDS = ("note", "reminder", "calendar", "herdr", "agent")
 MATCH_KINDS = ("wake", "relative", "dateish", "regex", "default")
+CONTEXT_KINDS = ("active-window",)
 
 
 @dataclass
@@ -30,6 +31,7 @@ class ActionSpec:
     background: bool = False
     fallback: str = "note"
     require: list[str] = field(default_factory=list)
+    context: list[str] = field(default_factory=list)
     glyph: str = ""
     source: Path | None = None
 
@@ -126,7 +128,7 @@ def builtin_specs() -> list[ActionSpec]:
         ActionSpec(
             id="calendar",
             label="Calendar",
-            description="Dated clock time (tomorrow 3pm, next Tuesday 10:00).",
+            description="Dated event (tomorrow 3pm, Friday at 2, in 2 days, September 5th at 3).",
             priority=40,
             builtin="calendar",
             match="dateish",
@@ -183,6 +185,10 @@ def spec_from_toml(path: Path) -> ActionSpec:
     wake = _string_list(data.get("wake"), f"{path}: wake")
     fields = _string_list(data.get("fields"), f"{path}: fields")
     require = _string_list(data.get("require"), f"{path}: require")
+    context = _string_list(data.get("context"), f"{path}: context")
+    unknown = [item for item in context if item not in CONTEXT_KINDS]
+    if unknown:
+        raise ValueError(f"{path}: context must be one of {', '.join(CONTEXT_KINDS)}")
     fallback = str(data.get("fallback") or "note").strip().lower()
     if fallback not in {"note", "none"}:
         raise ValueError(f"{path}: fallback must be note or none")
@@ -203,6 +209,7 @@ def spec_from_toml(path: Path) -> ActionSpec:
         background=bool(data.get("background", False)),
         fallback=fallback,
         require=require,
+        context=context,
         glyph=str(data.get("glyph") or ""),
         source=path,
     )
